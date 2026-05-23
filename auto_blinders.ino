@@ -1,70 +1,101 @@
-const short dest = 7780; // Steps needed to fully close blind
-const short speed = 1600; // You shouldn't change it but you can change and test new speed(+speed=slow down, -speed=faster)
-
 const byte pin_motor_step = 10; // step pin
 const byte pin_motor_dir = 8; // dir pin
 const byte close_level = 100; // value to close blinds
 const byte open_level = 200; // value to open blinds
+const short start = 0;
+const short dest = 7780; // Steps needed to fully close blind
+const short speed = 1600; // You shouldn't change it but you can change and test new speed(+speed=slow down, -speed=faster)
 
-bool direction = false;
-bool closed = false;
-bool motor_running = false;
-short light = 0;
-int steps = 0;
+class Stepper
+{
+  private:
+    byte pin_motor_step;
+    byte pin_motor_dir;
+
+    short dest;
+    short start;
+    short speed;
+
+    bool dir = false;
+    bool running = false;
+    int steps = 0;
+    bool closed = false;
+
+  public:
+    void init(int npin_motor_step, int npin_motor_dir)
+    {
+      pin_motor_step  = npin_motor_step;
+      pin_motor_dir   = npin_motor_dir;
+
+      pinMode(pin_motor_step, OUTPUT);
+      pinMode(pin_motor_dir, OUTPUT);
+    }
+    void process()
+    {
+      digitalWrite(pin_motor_dir, dir ? HIGH : LOW);
+
+      if (running)
+      {
+        if (dir)  steps++;
+        else      steps--;
+
+        digitalWrite(pin_motor_step, HIGH);
+        //delayMicroseconds(speed); // Optionaly     
+        digitalWrite(pin_motor_step, LOW);
+        delayMicroseconds(speed); 
+
+        if (steps >= dest)  { running = false; closed = true; }
+        if (steps <= start) { running = false; closed = false; }
+      }
+
+    }
+    void close()
+    {
+      if (isClosed()) return;
+      running = true;
+      dir = true;
+      closed = true;
+    }
+    void open()
+    {
+      if (!isClosed()) return;
+      running = true;
+      dir = false;
+      closed = false;
+    }
+    bool isClosed()
+    {
+      return closed;
+    }
+    void setPath(int nstart, int ndest, int nspeed)
+    {
+      start = nstart;
+      dest  = ndest;
+      speed = nspeed;
+    }
+};
+
+Stepper myStepper;
 
 void setup() {
   // Setting up our stepper
-  pinMode(pin_motor_step, OUTPUT);
-  pinMode(pin_motor_dir, OUTPUT);
-  
+  myStepper.init(pin_motor_step, pin_motor_dir);
+  myStepper.setPath(start, dest, speed);
 }
-
-
-void motor_run_step() {
-  digitalWrite(pin_motor_dir, direction ? HIGH : LOW); // Setting direction
-
-  if (motor_running) { // If it needs to close / open 
-    // Rotating our stepper
-    digitalWrite(pin_motor_step, HIGH);
-    //delayMicroseconds(speed); // Optionaly     
-    digitalWrite(pin_motor_step, LOW);
-    delayMicroseconds(speed);  
-
-    if (direction) steps++; // choosing to add or minus steps depended on our direction
-    else steps--;
-
-    if (steps >= dest && closed) { // if it closed so stop
-      motor_running = false;
-      digitalWrite(pin_motor_step, LOW);
-    }
-    else if (steps <= 0 && !closed) { // if it opened so stop
-      motor_running = false;
-      digitalWrite(pin_motor_step, LOW);
-    }
-
-  }
-}
-
-
 
 void loop() {
   // Reading our LDR and converting it value from 1023 0 to 255 0
-  light = analogRead(A1);
+  int light = analogRead(A1);
   light = map(light, 0, 1023, 0, 255);
   light = constrain(light, 0, 255);
 
-  if (light < close_level && !closed) { // If light level is lover than close_level and not closed then close
-    direction = true;
-    motor_running = true;
-    closed = true;
-  } else if (light > open_level && closed) { //
-    direction = false;
-    motor_running = true; 
-    closed = false;
+  if (light < close_level && !myStepper.isClosed()) { // If light level is lover than close_level and not closed then close
+    myStepper.close();
+  } else if (light > open_level && myStepper.isClosed()) { //
+    myStepper.open();
   }
 
-  motor_run_step(); // running our procedure 
-
+  myStepper.process(); // running our procedure 
 } 
 
 // program to test how much that "steps" you need to close blind. I used AI because I lost my own programm
